@@ -10,7 +10,7 @@ function App() {
     document.documentElement.classList.toggle('dark', !darkMode);
   };
 
-  // Mock data for chart
+  // Mock chart data
   const chartData = [
     { name: 'Jan', value: 400 },
     { name: 'Feb', value: 300 },
@@ -20,7 +20,7 @@ function App() {
     { name: 'Jun', value: 490 },
   ];
 
-  // Mock data for table
+  // Mock table data
   const tableData = [
     { id: 1, name: 'John Doe', role: 'Developer', status: 'Active', lastLogin: '2026-02-25 09:15' },
     { id: 2, name: 'Jane Smith', role: 'Analyst', status: 'Away', lastLogin: '2026-02-24 14:30' },
@@ -43,7 +43,6 @@ function App() {
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-100 text-gray-900'}`}>
-      {/* Header */}
       <header className="bg-blue-700 text-white p-6 shadow-lg">
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-3xl font-bold">Internal Dashboard</h1>
@@ -56,27 +55,22 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container mx-auto p-6">
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
             <h2 className="text-xl font-semibold mb-2 text-blue-600 dark:text-blue-400">Active Users</h2>
             <p className="text-4xl font-bold">1,456</p>
           </div>
-
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
             <h2 className="text-xl font-semibold mb-2 text-green-600 dark:text-green-400">System Health</h2>
             <p className="text-4xl font-bold">100%</p>
           </div>
-
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
             <h2 className="text-xl font-semibold mb-2 text-yellow-600 dark:text-yellow-400">Alerts</h2>
             <p className="text-4xl font-bold">4</p>
           </div>
         </div>
 
-        {/* Sortable Table */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8 overflow-x-auto">
           <h2 className="text-2xl font-semibold mb-4">User Activity Log</h2>
           <table {...getTableProps()} className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -112,7 +106,6 @@ function App() {
           </table>
         </div>
 
-        {/* Chart */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
           <h2 className="text-2xl font-semibold mb-4">Performance Trend</h2>
           <ResponsiveContainer width="100%" height={300}>
