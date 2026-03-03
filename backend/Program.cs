@@ -6,7 +6,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using InternalDashboard.Data;       // AppDbContext
-using InternalDashboard.Models;     // User, LoginRequest
+using InternalDashboard.Models;     // User, LoginRequest, RegisterRequest
 using BCrypt.Net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -75,6 +75,35 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // ────────────────────────────────────────────────
+// ONE-TIME STARTUP MIGRATION (padam selepas pertama kali berjaya)
+// ────────────────────────────────────────────────
+Console.WriteLine("=== STARTUP MIGRATION CHECK ===");
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    Console.WriteLine("DbContext resolved OK.");
+    Console.WriteLine("Connection string: " + db.Database.GetConnectionString());
+
+    Console.WriteLine("Applying migrations...");
+    db.Database.Migrate();
+
+    Console.WriteLine("MIGRATION SUCCESS! Table 'Users' and seed data ready.");
+}
+catch (Exception ex)
+{
+    Console.WriteLine("!!! STARTUP MIGRATION FAILED !!!");
+    Console.WriteLine("Error: " + ex.Message);
+    if (ex.InnerException != null)
+    {
+        Console.WriteLine("Inner exception: " + ex.InnerException.Message);
+    }
+    Console.WriteLine("Stack trace: " + ex.StackTrace);
+}
+Console.WriteLine("=== END STARTUP MIGRATION ===");
+
+// ────────────────────────────────────────────────
 // Middleware
 // ────────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
@@ -96,10 +125,14 @@ app.UseAuthorization();
 // ────────────────────────────────────────────────
 app.MapPost("/api/auth/register", async (RegisterRequest req, AppDbContext db) =>
 {
-    // Check kalau username dah wujud
-    if (await db.Users.AnyAsync(u => u.Username == req.Username))
+    if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
     {
-        return Results.BadRequest(new { message = "Username sudah wujud" });
+        return Results.BadRequest("Username dan password diperlukan");
+    }
+
+    if (await db.Users.AnyAsync(u => u.Username.ToLower() == req.Username.ToLower()))
+    {
+        return Results.BadRequest("Username sudah wujud");
     }
 
     var newUser = new User
@@ -112,12 +145,17 @@ app.MapPost("/api/auth/register", async (RegisterRequest req, AppDbContext db) =
     db.Users.Add(newUser);
     await db.SaveChangesAsync();
 
-    return Results.Ok(new { message = "User berjaya didaftar" });
+    return Results.Created($"/api/users/{newUser.Id}", new
+    {
+        message = "User berjaya didaftar",
+        username = newUser.Username,
+        role = newUser.Role
+    });
 })
 .WithName("Register");
 
 // ────────────────────────────────────────────────
-// Login – check dari database
+// Login – check database dengan BCrypt
 // ────────────────────────────────────────────────
 app.MapPost("/api/auth/login", async (LoginRequest req, AppDbContext db) =>
 {
@@ -185,6 +223,9 @@ app.MapGet("/api/admin/dashboard", () =>
 .RequireAuthorization(policy => policy.RequireRole("Admin"))
 .WithName("AdminDashboard");
 
+// ────────────────────────────────────────────────
+// Run the app
+// ────────────────────────────────────────────────
 app.Run();
 
 // ────────────────────────────────────────────────

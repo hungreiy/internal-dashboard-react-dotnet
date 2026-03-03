@@ -1,0 +1,30 @@
+# .NET build & temp
+bin/
+obj/
+Properties/
+*.user
+*.suo
+
+# Database & local files
+*.db
+*.sqlite
+app.db
+
+# SDK portable
+dotnet-sdk-portable/
+nodejs-portable/
+
+# Backup & old
+*.bak
+*.old
+
+# Logs & temp
+*.log
+*.tmp
+
+# VS Code & editor
+.vscode/
+.idea/
+
+# Node
+node_modules/
