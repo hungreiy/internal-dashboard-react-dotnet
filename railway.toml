@@ -1,0 +1,11 @@
+# railway.toml - Config untuk Railway deploy
+
+[deploy]
+startCommand = "dotnet out/backend.dll"
+
+[build]
+builder = "RAILPACK"
+buildCommand = "dotnet publish backend/backend.csproj -c Release -o out"
+
+[deploy]
+rootDirectory = "backend"
