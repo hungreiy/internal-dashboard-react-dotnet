@@ -1,11 +1,10 @@
-# railway.toml - Config untuk Railway deploy
-
-[deploy]
-startCommand = "dotnet out/backend.dll"
-
 [build]
-builder = "RAILPACK"
-buildCommand = "dotnet publish backend/backend.csproj -c Release -o out"
+# No custom build command since Dockerfile handles build
+dockerfilePath = "Dockerfile"
+# Context is root directory, no need to set rootDir
 
 [deploy]
-rootDirectory = "backend"
+# No custom start command, Dockerfile ENTRYPOINT will be used
+
+[service]
+name = "internal-dashboard-backend"
