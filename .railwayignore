@@ -1,0 +1,7 @@
+nodejs-portable/
+dotnet-sdk-portable/
+bin/
+obj/
+*.user
+*.suo
+*.lock.json
