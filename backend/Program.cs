@@ -9,11 +9,14 @@ using InternalDashboard.Data;       // AppDbContext
 using InternalDashboard.Models;     // User, LoginRequest, RegisterRequest
 using BCrypt.Net;
 
+// Create builder
 var builder = WebApplication.CreateBuilder(args);
 
-// ────────────────────────────────────────────────
+// ──────────────────────────────
 // JWT Authentication
-// ────────────────────────────────────────────────
+// ──────────────────────────────
+var jwtKey = "this-is-a-super-secret-key-at-least-32-chars-long-2025!";
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -23,34 +26,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes("this-is-a-super-secret-key-at-least-32-chars-long-2025!")
-            ),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.Zero
         };
     });
 
 builder.Services.AddAuthorization();
 
-// ────────────────────────────────────────────────
-// SQLite + EF Core
-// ────────────────────────────────────────────────
+// ──────────────────────────────
+// PostgreSQL EF Core
+// ──────────────────────────────
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=app.db"));
+    options.UseNpgsql(connectionString));
 
-// ────────────────────────────────────────────────
+// ──────────────────────────────
 // Swagger
-// ────────────────────────────────────────────────
+// ──────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Internal Dashboard API",
-        Version = "v1",
-        Description = "JWT + SQLite + BCrypt demo"
-    });
-
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Internal Dashboard API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header. Example: 'Bearer {token}'",
@@ -59,14 +55,10 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
             Array.Empty<string>()
         }
     });
@@ -74,98 +66,62 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// ────────────────────────────────────────────────
-// ONE-TIME STARTUP MIGRATION (padam selepas pertama kali berjaya)
-// ────────────────────────────────────────────────
-Console.WriteLine("=== STARTUP MIGRATION CHECK ===");
+// ──────────────────────────────
+// Apply Migrations on Startup
+// ──────────────────────────────
 try
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-    Console.WriteLine("DbContext resolved OK.");
-    Console.WriteLine("Connection string: " + db.Database.GetConnectionString());
-
-    Console.WriteLine("Applying migrations...");
     db.Database.Migrate();
-
-    Console.WriteLine("MIGRATION SUCCESS! Table 'Users' and seed data ready.");
+    Console.WriteLine("Migrations applied successfully!");
 }
 catch (Exception ex)
 {
-    Console.WriteLine("!!! STARTUP MIGRATION FAILED !!!");
-    Console.WriteLine("Error: " + ex.Message);
-    if (ex.InnerException != null)
-    {
-        Console.WriteLine("Inner exception: " + ex.InnerException.Message);
-    }
-    Console.WriteLine("Stack trace: " + ex.StackTrace);
+    Console.WriteLine("Migration failed: " + ex.Message);
 }
-Console.WriteLine("=== END STARTUP MIGRATION ===");
 
-// ────────────────────────────────────────────────
+// ──────────────────────────────
 // Middleware
-// ────────────────────────────────────────────────
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Internal Dashboard API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+// ──────────────────────────────
+app.UseSwagger();
+app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "Internal Dashboard API v1"); c.RoutePrefix = "swagger"; });
 
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ────────────────────────────────────────────────
-// Register new user
-// ────────────────────────────────────────────────
+// ──────────────────────────────
+// API Endpoints
+// ──────────────────────────────
+
+// Register
 app.MapPost("/api/auth/register", async (RegisterRequest req, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password))
-    {
         return Results.BadRequest("Username dan password diperlukan");
-    }
 
     if (await db.Users.AnyAsync(u => u.Username.ToLower() == req.Username.ToLower()))
-    {
         return Results.BadRequest("Username sudah wujud");
-    }
 
     var newUser = new User
     {
         Username = req.Username,
         PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
-        Role = "User"  // default role
+        Role = "User"
     };
 
     db.Users.Add(newUser);
     await db.SaveChangesAsync();
 
-    return Results.Created($"/api/users/{newUser.Id}", new
-    {
-        message = "User berjaya didaftar",
-        username = newUser.Username,
-        role = newUser.Role
-    });
-})
-.WithName("Register");
+    return Results.Ok(new { message = "User berjaya didaftar", user = newUser.Username });
+});
 
-// ────────────────────────────────────────────────
-// Login – check database dengan BCrypt
-// ────────────────────────────────────────────────
+// Login
 app.MapPost("/api/auth/login", async (LoginRequest req, AppDbContext db) =>
 {
-    var user = await db.Users
-        .FirstOrDefaultAsync(u => u.Username == req.Username);
-
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Username == req.Username);
     if (user == null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
-    {
         return Results.Unauthorized();
-    }
 
     var claims = new[]
     {
@@ -174,9 +130,7 @@ app.MapPost("/api/auth/login", async (LoginRequest req, AppDbContext db) =>
         new Claim(ClaimTypes.Role, user.Role)
     };
 
-    var key = new SymmetricSecurityKey(
-        Encoding.UTF8.GetBytes("this-is-a-super-secret-key-at-least-32-chars-long-2025!"));
-
+    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
     var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
     var token = new JwtSecurityToken(
@@ -185,51 +139,34 @@ app.MapPost("/api/auth/login", async (LoginRequest req, AppDbContext db) =>
         signingCredentials: creds
     );
 
-    return Results.Ok(new
-    {
-        token = new JwtSecurityTokenHandler().WriteToken(token),
-        expires = token.ValidTo.ToString("o")
-    });
-})
-.WithName("Login");
+    return Results.Ok(new { token = new JwtSecurityTokenHandler().WriteToken(token), expires = token.ValidTo });
+});
 
-// ────────────────────────────────────────────────
-// Any authenticated user
-// ────────────────────────────────────────────────
+// Authenticated Users
 app.MapGet("/api/users", () =>
 {
     var users = new[]
     {
         new { Id = 1, Name = "Alice", Role = "Admin" },
-        new { Id = 2, Name = "Bob", Role = "User" },
-        new { Id = 3, Name = "Charlie", Role = "User" }
+        new { Id = 2, Name = "Bob", Role = "User" }
     };
-
     return Results.Ok(users);
-})
-.RequireAuthorization()
-.WithName("GetUsers");
+}).RequireAuthorization();
 
-// ────────────────────────────────────────────────
-// Admin only
-// ────────────────────────────────────────────────
-app.MapGet("/api/admin/dashboard", () =>
-{
-    return Results.Ok(new 
-    { 
-        message = "Welcome to Admin Dashboard! Only Admins allowed." 
-    });
-})
-.RequireAuthorization(policy => policy.RequireRole("Admin"))
-.WithName("AdminDashboard");
+// Admin Only
+app.MapGet("/api/admin/dashboard", () => Results.Ok(new { message = "Welcome Admin!" }))
+    .RequireAuthorization(policy => policy.RequireRole("Admin"));
 
-// ────────────────────────────────────────────────
-// Run the app
-// ────────────────────────────────────────────────
+// ──────────────────────────────
+// Bind to Railway PORT
+// ──────────────────────────────
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+app.Urls.Add($"http://*:{port}");
+
 app.Run();
 
-// ────────────────────────────────────────────────
+// ──────────────────────────────
 // Models
-// ────────────────────────────────────────────────
+// ──────────────────────────────
 record LoginRequest(string Username, string Password);
 record RegisterRequest(string Username, string Password);
